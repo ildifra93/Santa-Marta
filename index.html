@@ -123,7 +123,7 @@ async function poll(){if(!who||!RDY||POLL||SYNC)return;if(document.hidden&&Date.
   FAIL=0;syncBar()}
  catch(e){if(e.auth)logout('La sessione è scaduta: accedi di nuovo.');else if(e.net){FAIL=1;syncBar()}}finally{POLL=0}}
 /* accesso e sessione */
-function logout(msg){setSess(null);who=null;RDY=0;toastQ=[];S={machines:[],programs:[],users:[],admins:[],requests:[],bookings:[],log:[],notifs:[],audit:[],off:0};BASE={};LAST={};FAIL=0;PC=null;closeAlert();closeM();sel={};tab='';syncBar();render();if(msg)alert(msg)}
+function logout(msg){pushOff(SESS&&SESS.access_token);PBX=0;setSess(null);who=null;RDY=0;toastQ=[];S={machines:[],programs:[],users:[],admins:[],requests:[],bookings:[],log:[],notifs:[],audit:[],off:0};BASE={};LAST={};FAIL=0;PC=null;closeAlert();closeM();sel={};tab='';syncBar();render();if(msg)alert(msg)}
 async function enter(kind){let p;try{p=(await rest('profiles','?select=*&id=eq.'+SESS.uid))[0]}catch(e){setSess(null);return loginErr(e)}
  if(!p){setSess(null);return alert('Account non trovato.')}
  if(kind=='admin'&&p.role=='tenant'){setSess(null);return alert('Questo account non è di un amministratore: torna alla pagina degli inquilini.')}
@@ -132,6 +132,7 @@ async function enter(kind){let p;try{p=(await rest('profiles','?select=*&id=eq.'
 async function startSession(p,q){who=p.role=='tenant'?p.id:'admin:'+p.id;
  try{await loadAll()}catch(e){who=null;if(e.auth)setSess(null);render();return alert(e.net?'Non riesco a collegarmi: controlla la connessione.':'Errore di caricamento: riprova.')}
  RDY=1;tab=p.role=='tenant'?'home':'ahome';render();
+ pushSync(0).catch(()=>{});
  if(p.role=='tenant'){if((S.users.find(x=>x.id==p.id)||{}).welcomed)openAlert();else A.welcome(p.id)}else A.admIn(p.id,q)}
 async function boot(){if(!SESS)return;BOOT=1;render();
  try{const p=(await rest('profiles','?select=*&id=eq.'+SESS.uid))[0];if(!p||p.must_change_pw)setSess(null);else await startSession(p,1)}
@@ -142,6 +143,32 @@ const purge=id=>{dropB(b=>b.uid==id);nullLog('uid',id);S.notifs.forEach(n=>{if(n
 function fnErr(e,id){const m=e.net?'Connessione assente: riprova.':e.status==401||e.status==403?'Operazione non consentita.':e.status<500&&e.message?e.message:'Operazione non riuscita: riprova tra poco.',el=id&&document.getElementById(id);if(el)el.textContent=m;else alert(m)}
 function tmpPw(t,nm,until){modal(`<h2>${esc(t)}</h2><p>Nome utente: <b>${esc(nm)}</b></p><p>Comunicalo di persona. La persona apre l'app, scrive solo il nome (senza password), preme <b>Entra</b> e sceglie la sua password.</p><p class="mu">Il primo accesso è possibile fino a ${esc(fT(new Date(until).getTime()))}, una volta sola. Dopo, usa "Reimposta password".</p><button class="p" style="width:100%" onclick="closeM()">Ok</button>`)}
 setInterval(poll,8000);addEventListener('online',()=>{pump(1);poll()});
+
+/* notifiche push: iscrizione del telefono all'account collegato */
+const VAPID='BEiWkg_JMPaT9MdGfVk3PDenaCeuobea2-PadPTkryWaRQjU0AYKvjbnlcggPSeZ1H6LUdiH5eWOYr6yoOBzpUI',pushOk=()=>!!VAPID&&'serviceWorker' in navigator&&'PushManager' in window&&'Notification' in window,
+ isIos=()=>/iphone|ipad|ipod/i.test(navigator.userAgent)||(navigator.platform=='MacIntel'&&navigator.maxTouchPoints>1),
+ isStand=()=>navigator.standalone===true||(window.matchMedia&&matchMedia('(display-mode: standalone)').matches),
+ b64u=t=>{const r=atob((t+'='.repeat((4-t.length%4)%4)).replace(/-/g,'+').replace(/_/g,'/'));return Uint8Array.from(r,c=>c.charCodeAt(0))};
+let PBX=0,PBS='';
+async function pushSync(ask){if(!SESS||!pushOk())return false;
+ const reg=await navigator.serviceWorker.ready;
+ if(ask&&Notification.permission=='default')await Notification.requestPermission();
+ if(Notification.permission!='granted')return false;
+ let sub=await reg.pushManager.getSubscription();
+ if(!sub)sub=await reg.pushManager.subscribe({userVisibleOnly:true,applicationServerKey:b64u(VAPID)});
+ const j=sub.toJSON();
+ await api('/rest/v1/rpc/register_push',{method:'POST',body:{p_endpoint:j.endpoint,p_p256dh:j.keys.p256dh,p_auth:j.keys.auth}});return true}
+async function pushOff(tok){try{if(!pushOk()||!tok)return;const reg=await navigator.serviceWorker.ready,sub=await reg.pushManager.getSubscription();if(!sub)return;
+ await fetch(SB_URL+'/rest/v1/rpc/unregister_push',{method:'POST',headers:{apikey:SB_KEY,Authorization:'Bearer '+tok,'Content-Type':'application/json'},body:JSON.stringify({p_endpoint:sub.endpoint})})}catch(e){}}
+function pushBar(){let st='';
+ if(who&&RDY&&!PBX){if(pushOk()){if(Notification.permission=='default')st='ask'}else if(isIos()&&!isStand())st='ios'}
+ if(st==PBS)return;PBS=st;let d=document.getElementById('pb');if(d)d.remove();if(!st)return;
+ d=document.createElement('div');d.id='pb';d.className='card';d.style.cssText='position:fixed;left:12px;right:12px;bottom:12px;max-width:616px;margin:0 auto;z-index:15;box-shadow:0 4px 18px #0004';
+ d.innerHTML=st=='ask'?'<b>🔔 Attiva le notifiche</b><p class="mu" style="margin:6px 0 10px">Ti avvisiamo quando tocca a te, quando finisce il ciclo e per le richieste, anche con l’app chiusa.</p><div class="row"><button class="p" id="pby">Attiva</button><button id="pbn">Non ora</button></div>'
+  :'<b>🔔 Notifiche su iPhone</b><p class="mu" style="margin:6px 0 10px">Per ricevere le notifiche tocca <b>Condividi</b> (il quadrato con la freccia) → <b>Aggiungi alla schermata Home</b>, poi apri l’app dall’icona che si crea.</p><div class="row"><button id="pbn">Ho capito</button></div>';
+ document.body.appendChild(d);document.getElementById('pbn').onclick=()=>{PBX=1;pushBar()};
+ const y=document.getElementById('pby');if(y)y.onclick=async()=>{y.disabled=true;try{await pushSync(1)}catch(e){}PBX=1;pushBar();if(Notification.permission=='denied')alert('Le notifiche sono bloccate: riattivale dalle impostazioni del telefono per questo sito.')}}
+setInterval(()=>{try{pushBar()}catch(e){}},2500);
 
 const now=()=>Date.now()+S.off,uid=()=>Math.random().toString(36).slice(2,9);
 const esc=s=>String(s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
