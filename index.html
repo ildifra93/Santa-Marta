@@ -297,6 +297,12 @@ function statBody(){return `<p class="mu">Informativa sul trattamento dei dati a
 function statModal(cb,ro){STCB=cb||null;modal(`<div id="stm"></div><h2>Dati a fini statistici 📊</h2>`+statBody()+(ro?`<div class="row"><button class="p" onclick="closeM()">Chiudi</button></div>`:`<div class="row" style="position:sticky;bottom:-14px;margin:12px -14px -14px;padding:12px 14px;background:var(--card);border-top:2px solid var(--ln)"><button class="p" onclick="A.statOk()">Accetto</button><button onclick="logout()">Non accetto: esci</button></div>`))}
 async function statOk(){try{await api('/rest/v1/rpc/accept_stats',{method:'POST',body:{p_ver:STATV}})}catch(e){return alert(e.net?'Connessione assente: riprova.':'Non riesco a salvare: riprova.')}
  const x=S.users.find(u=>u.id==who);if(x)x.sv=STATV;closeM();const f=STCB;STCB=null;if(f)f();else render()}
+function admRun(mid){const b=S.bookings.find(x=>x.mid==mid&&x.status=='running');if(!b)return '';const n=now(),late=n>b.end?Math.round((n-b.end)/M):0;return `<div class="wa" style="margin-top:8px">In uso da <b>${esc(usr(b.uid))}</b> · fine prevista ${fT(b.end)}${late?' · in ritardo di '+late+'′':''}</div><div class="row" style="margin-top:8px"><button class="d" onclick="A.admEnd('${b.id}')">Termina ciclo</button></div>`}
+function admEnd(id){const b=S.bookings.find(x=>x.id==id);if(!b||b.status!='running')return;modal(`<h2>Terminare il ciclo?</h2><p>${esc(mach(b.mid).name)} · in uso da <b>${esc(usr(b.uid))}</b>. Il ciclo viene chiuso a nome dell'amministratore e l'utente riceve un avviso.</p><div class="row"><button class="d" onclick="A.admEnd2('${id}')">Sì, termina</button><button onclick="closeM()">Annulla</button></div>`)}
+function admEnd2(id){closeM();const b=S.bookings.find(x=>x.id==id);if(!b||b.status!='running')return render();A.stop(id);notify(b.uid,mach(b.mid).name+': il ciclo è stato chiuso da un amministratore.');audit('Ciclo terminato: '+mach(b.mid).name+' ('+usr(b.uid)+')');save();render()}
+let BDG=-1;
+function badgeSync(){try{if(!('setAppBadge' in navigator))return;const t=now()-3*864e5,k=who?S.notifs.filter(x=>mine(x)&&!isSeen(x)&&x.t>t).length+(isAdm()?0:mUnread()):0;if(k===BDG)return;BDG=k;(k>0?navigator.setAppBadge(k):navigator.clearAppBadge()).catch(()=>{})}catch(e){}}
+setInterval(badgeSync,3000);
 
 const greet=()=>{const d=new Date(now()),w=d.getDay(),h=d.getHours();return w==0||w==6?'Buon WeekEnd':h>=5&&h<13?'Buongiorno':h>=13&&h<18?'Buon pomeriggio':'Buonasera'};
 const now=()=>Date.now()+S.off,uid=()=>Math.random().toString(36).slice(2,9);
@@ -499,6 +505,8 @@ async admLogin(){const nm=val('ai').trim(),pw=val('ap');if(!nm)return alert('Scr
  statOk(){statOk()},
  statView(){statModal(null,1)},
  welAv(id){WAV=1;avModal()},
+ admEnd(id){admEnd(id)},
+ admEnd2(id){admEnd2(id)},
  mopen(){sel.mc=null;sel.mp=0;sel.mq='';tab='msg';render();msgPoll(1)},
  mback(){sel.mc=null;sel.mp=0;sel.mq='';render()},
  mnew(){sel.mp=1;sel.mq='';render()},
@@ -561,7 +569,7 @@ const views={
  mine(){const t=sel.mt||'att',all=S.bookings.filter(b=>b.uid==who).sort((a,c)=>c.start-a.start),f={att:b=>live(b),ter:b=>b.status=='done',ann:b=>b.status=='cancelled'},L=[['att','Attive'],['ter','Terminate'],['ann','Annullate']],l=all.filter(f[t]);return `<div class="row" style="margin:6px 0">${L.map(x=>`<button class="${t==x[0]?'p':''}" onclick="sel.mt='${x[0]}';render()">${x[1]} (${all.filter(f[x[0]]).length})</button>`).join('')}</div>`+(l.length?l.map(b=>bCard(b,'me')).join(''):'<p class="mu">Nessuna prenotazione.</p>')},
  nt(){return isAdm()?ntAdm():ntUser()},
  mc(){return S.machines.map(m=>`<div class="card"><div class="row sp"><b>${esc(m.name)}</b><span><span class="tag">${m.type=='wash'?'Lavatrice':'Asciugatrice'}</span> ${m.blocked?'<span class="tag er" style="font-weight:700">BLOCCATA</span>':stBadge(m.id)}</span></div><div class="mu">${esc(((m.brand||'')+' '+(m.model||'')).trim()||'Marca e modello non indicati')}</div><div class="mu">Seriale ${esc(m.serial||'—')} · ${m.kg} kg</div>${m.blocked?`<div class="er">⛔ ${esc(m.blocked)}</div>`:''}
-  <div class="row" style="margin-top:8px"><button onclick="A.mEdit('${m.id}')">Modifica</button><button onclick="A.block('${m.id}')">${m.blocked?'Sblocca':'Blocca prenotazioni'}</button><button class="d" onclick="A.delM('${m.id}')">Elimina</button></div></div>`).join('')+
+  ${admRun(m.id)}<div class="row" style="margin-top:8px"><button onclick="A.mEdit('${m.id}')">Modifica</button><button onclick="A.block('${m.id}')">${m.blocked?'Sblocca':'Blocca prenotazioni'}</button><button class="d" onclick="A.delM('${m.id}')">Elimina</button></div></div>`).join('')+
   (S.machines.length>=20?'<div class="card"><p class="mu">Hai raggiunto il massimo di 20 macchine: eliminane una per aggiungerne un\'altra.</p></div>':`<div class="card"><h2>Aggiungi macchina</h2><div class="g"><input id="mn" placeholder="Nome"><input id="mb" placeholder="Marca"><input id="mo" placeholder="Modello"><input id="ms" placeholder="Seriale"><input id="mk" type="number" placeholder="Kg"><select id="mt"><option value="wash">Lavatrice</option><option value="dry">Asciugatrice</option></select></div><p class="mu" style="margin-top:8px">Immagine (facoltativa):</p><input id="mi" type="file" accept="image/*"><div class="row" style="margin-top:8px"><button class="p" onclick="A.addM()">Aggiungi</button></div></div>`)},
  pg(){const row=p=>`<div class="card row sp"><span><b>${esc(p.name)}</b> <span class="mu">${p.type=='wash'?'lavaggio':'asciugatura'} · ${p.min}′</span></span><button class="d" onclick="A.delP('${p.id}')">✕</button></div>`,
   gr=S.machines.map(m=>({t:m.name+(m.model?' · '+m.model:''),l:S.programs.filter(p=>p.mid==m.id)})).concat([{t:'Tutte le lavatrici',l:S.programs.filter(p=>!p.mid&&p.type=='wash')},{t:'Tutte le asciugatrici',l:S.programs.filter(p=>!p.mid&&p.type=='dry')}]).filter(g=>g.l.length);
