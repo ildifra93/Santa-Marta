@@ -543,7 +543,7 @@ async admLogin(){const nm=val('ai').trim(),pw=val('ap');if(!nm)return alert('Scr
  book(){const alert=be,m=sel.m,p=document.getElementById('bp').value,t=document.getElementById('bt').value;
   const mm=S.machines.find(x=>x.id==m);if(!mm||mm.blocked)return alert('Macchina non prenotabile');
   const s=new Date(t).getTime();if(!s)return alert('Scegli data e ora');if(s<now()-5*M)return alert('Orario nel passato');
-  const e=s+prog(p).min*M;if(conflict(m,s,e))return alert('Fascia già occupata. Prima disponibilità per questo programma: '+fT(fit(m,e-s))+'.');
+  const e=s+prog(p).min*M;{const k=closedAt(s,e,m);if(k)return alert('Non prenotabile: '+k.why+' ('+(k.m?mach(k.m).name+', ':'')+clsTxt(k)+').')}if(conflict(m,s,e))return alert('Fascia già occupata. Prima disponibilità per questo programma: '+fT(fit(m,e-s))+'.');
   const nb={id:uid(),mid:m,uid:who,pid:p,start:s,end:e,status:'booked'};S.bookings.push(nb);sel.bt='';save();tab='mine';render();if(mm.type=='wash'&&dryOpts(nb).length)dryOffer(nb.id);else closeM()},
  dryYes(){const w=S.bookings.find(x=>x.id==sel.dw&&x.uid==who&&live(x)),[mi,pi]=String(sel.dv).split('|'),m=S.machines.find(x=>x.id==mi),p=S.programs.find(x=>x.id==pi);
   if(!w||!m||!p||m.blocked)return dryOffer(sel.dw,'Questa asciugatrice non è più disponibile: scegline un’altra.');
