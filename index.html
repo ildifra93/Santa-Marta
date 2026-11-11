@@ -34,6 +34,29 @@ body.lg{--ph:url("data:image/jpeg;base64,/9j/4AAQSkZJRgABAQAAAQABAAD/2wBDAAgFBgc
 </style></head><body>
 <div id="app"></div><div id="dock"><div id="alertbar"></div><div id="toast"></div></div>
 <script>
+/* ORA ITALIANA: la lavanderia è in Italia, quindi date e orari si leggono e si scrivono sempre in ora di Roma, ovunque sia il telefono */
+(()=>{const D=Date,Z='Europe/Rome',F=new Intl.DateTimeFormat('en-GB',{timeZone:Z,hourCycle:'h23',year:'numeric',month:'numeric',day:'numeric',hour:'numeric',minute:'numeric',second:'numeric',weekday:'short'}),W={Sun:0,Mon:1,Tue:2,Wed:3,Thu:4,Fri:5,Sat:6};
+const P=t=>{const o={};F.formatToParts(new D(t)).forEach(x=>{o[x.type]=x.value});return{y:+o.year,mo:+o.month,d:+o.day,h:+o.hour%24,mi:+o.minute,s:+o.second,w:W[o.weekday]}};
+const off=t=>{const p=P(t);return(D.UTC(p.y,p.mo-1,p.d,p.h,p.mi,p.s)-Math.floor(t/1000)*1000)/60000};
+const mk=(y,mo,d,h,mi,s,ms)=>{const g=D.UTC(y,mo,d,h,mi,s,ms);let r=g-off(g)*60000;const o2=off(r);return o2*60000===g-r?r:g-o2*60000};
+class RD extends D{
+ constructor(...a){if(a.length>1&&typeof a[0]=='number')super(mk(a[0],a[1],a[2]===undefined?1:a[2],a[3]||0,a[4]||0,a[5]||0,a[6]||0));
+ else if(a.length==1&&typeof a[0]=='string'&&/^(\d{4})-(\d\d)-(\d\d)T(\d\d):(\d\d)(?::(\d\d)(?:\.\d+)?)?$/.test(a[0])){const m=a[0].match(/^(\d{4})-(\d\d)-(\d\d)T(\d\d):(\d\d)(?::(\d\d))?/);super(mk(+m[1],+m[2]-1,+m[3],+m[4],+m[5],+(m[6]||0),0))}
+ else super(...a)}
+ getFullYear(){return isNaN(this)?NaN:P(this.getTime()).y}
+ getMonth(){return isNaN(this)?NaN:P(this.getTime()).mo-1}
+ getDate(){return isNaN(this)?NaN:P(this.getTime()).d}
+ getDay(){return isNaN(this)?NaN:P(this.getTime()).w}
+ getHours(){return isNaN(this)?NaN:P(this.getTime()).h}
+ getMinutes(){return isNaN(this)?NaN:P(this.getTime()).mi}
+ getSeconds(){return isNaN(this)?NaN:P(this.getTime()).s}
+ getTimezoneOffset(){return isNaN(this)?NaN:-off(this.getTime())}
+ toDateString(){if(isNaN(this))return 'Invalid Date';const p=P(this.getTime());return p.y+'-'+p.mo+'-'+p.d}
+ toLocaleString(l,o){return super.toLocaleString(l,Object.assign({timeZone:Z},o))}
+ toLocaleDateString(l,o){return super.toLocaleDateString(l,Object.assign({timeZone:Z},o))}
+ toLocaleTimeString(l,o){return super.toLocaleTimeString(l,Object.assign({timeZone:Z},o))}
+}
+window.Date=RD;window.lt=t=>new RD(t-new RD(t).getTimezoneOffset()*60000)})();
 const SB_URL='https://hbaxdhcbtngnbmfzpdoj.supabase.co',SB_KEY='sb_publishable_IlBybTVRxD-ftuk9Lsvf5Q_DE3GvL6P',MAIL='@lavanderia-santamarta.app',SK='lav_sess',M=6e4;
 let S={machines:[],programs:[],users:[],admins:[],requests:[],bookings:[],log:[],notifs:[],audit:[],off:0};
 let who=null,tab='',sel={},toastQ=[];
@@ -440,7 +463,7 @@ function imgData(f){return new Promise(res=>{const r=new FileReader();r.onload=(
 function be(m){const e=document.getElementById('be');if(e)e.textContent=m;else alert(m)}
 function mcard(m){const nm=((m.brand||'')+' '+(m.model||'')).trim();return `<div class="card" onclick="A.openM('${m.id}')" style="display:flex;gap:12px;align-items:center;cursor:pointer">${machImg(m)}<div style="flex:1;min-width:0"><b>${esc(m.name)}</b>${nm?`<div>${esc(nm)}</div>`:''}<div class="mu">S/N ${esc(m.serial||'-')} · ${m.kg} kg</div><div style="margin-top:6px">${m.blocked?'<span class="tag er" style="font-weight:700">BLOCCATA</span>':closedNow(m.id)?'<span class="tag er" style="font-weight:700">CHIUSA fino alle '+clsHm(closedNow(m.id).e)+'</span>':stBadge(m.id)}</div>${m.blocked?'<div class="er">⛔ '+esc(m.blocked)+'</div>':''}</div></div>`}
 function newV(){if(!S.machines.length)return '<p class="mu">Nessuna macchina.</p>';return '<h2>Scegli una macchina</h2>'+clsBanner()+S.machines.map(mcard).join('')+'<button onclick="A.repM()" style="width:100%;margin-top:4px;padding:12px">⚠️ Fai una segnalazione</button>'}
-function machModal(id){const m=S.machines.find(x=>x.id==id);if(!m)return;sel.m=id;const n=now(),nm=((m.brand||'')+' '+(m.model||'')).trim(),mine=S.bookings.filter(b=>b.uid==who&&b.mid==id&&live(b)).sort((a,c)=>a.start-c.start),run=S.bookings.find(b=>b.mid==id&&b.status=='running'),ps=pfor(m),pg=ps.find(p=>p.id==sel.p)||ps[0],d=pg?new Date(fit(id,pg.min*M)-new Date().getTimezoneOffset()*M).toISOString().slice(0,16):'',ex=S.bookings.filter(b=>live(b)&&b.mid==id).sort((a,c)=>a.start-c.start),gp=gaps(id);
+function machModal(id){const m=S.machines.find(x=>x.id==id);if(!m)return;sel.m=id;const n=now(),nm=((m.brand||'')+' '+(m.model||'')).trim(),mine=S.bookings.filter(b=>b.uid==who&&b.mid==id&&live(b)).sort((a,c)=>a.start-c.start),run=S.bookings.find(b=>b.mid==id&&b.status=='running'),ps=pfor(m),pg=ps.find(p=>p.id==sel.p)||ps[0],d=pg?lt(fit(id,pg.min*M)).toISOString().slice(0,16):'',ex=S.bookings.filter(b=>live(b)&&b.mid==id).sort((a,c)=>a.start-c.start),gp=gaps(id);
  let h='<div class="row sp" style="align-items:flex-start;flex-wrap:nowrap"><div style="display:flex;gap:12px">'+machImg(m,72)+'<div><b>'+esc(m.name)+'</b>'+(nm?'<div>'+esc(nm)+'</div>':'')+'<div class="mu">S/N '+esc(m.serial||'-')+' · '+m.kg+' kg</div><div style="margin-top:6px">'+(m.blocked?'<span class="tag er" style="font-weight:700">BLOCCATA</span>':stBadge(id))+'</div></div></div><button onclick="closeM()" aria-label="Chiudi">✕</button></div>';
  if(run)h+='<div class="mu" style="margin-top:10px">'+(run.uid==who?'Il tuo ciclo è in corso':'Ciclo in corso')+' fino alle '+fT(run.end)+(n>run.end?' <span class="wa">(in ritardo di '+Math.round((n-run.end)/M)+' min)</span>':'')+'</div>';
  if(mine.length)h+='<h2>Le tue prenotazioni su questa macchina</h2>'+mine.map(b=>bCard(b,'mm')).join('');
@@ -559,8 +582,8 @@ async admLogin(){const nm=val('ai').trim(),pw=val('ap');if(!nm)return alert('Scr
   const s=fit(mi,p.min*M,w.end);if(s!=sel.ds)return dryOffer(sel.dw,'Nel frattempo la disponibilità è cambiata: ecco la nuova prima finestra libera.');
   const e=s+p.min*M;if(conflict(mi,s,e))return dryOffer(sel.dw,'Fascia appena occupata: ecco la nuova prima finestra libera.');
   S.bookings.push({id:uid(),mid:mi,uid:who,pid:pi,start:s,end:e,status:'booked',lk:w.id});closeM();save();tab='mine';render()},
- pick(t){const m=S.machines.find(x=>x.id==sel.m),ps=pfor(m),pg=ps.find(p=>p.id==sel.p)||ps[0];if(!pg)return;const dur=pg.min*M;{const k=closedAt(t,t+dur,m.id);if(k)return alert('Non si può prenotare in questa fascia: '+k.why+' ('+clsTxt(k)+').')}if(conflict(m.id,t,t+dur)){const f=fit(m.id,dur);modal(`<h2>Fascia troppo corta</h2><p>${esc(pg.name)} dura ${pg.min} min e non ci sta in questa fascia.</p><p>Prima disponibilità per questo programma: <b>${fT(f)}</b></p><div class="row"><button class="p" onclick="A.use(${f})">Usa questo orario</button><button onclick="closeM()">Chiudi</button></div>`);return}sel.bt=new Date(t-new Date().getTimezoneOffset()*M).toISOString().slice(0,16);machModal(sel.m)},
- use(t){sel.bt=new Date(t-new Date().getTimezoneOffset()*M).toISOString().slice(0,16);machModal(sel.m)},
+ pick(t){const m=S.machines.find(x=>x.id==sel.m),ps=pfor(m),pg=ps.find(p=>p.id==sel.p)||ps[0];if(!pg)return;const dur=pg.min*M;{const k=closedAt(t,t+dur,m.id);if(k)return alert('Non si può prenotare in questa fascia: '+k.why+' ('+clsTxt(k)+').')}if(conflict(m.id,t,t+dur)){const f=fit(m.id,dur);modal(`<h2>Fascia troppo corta</h2><p>${esc(pg.name)} dura ${pg.min} min e non ci sta in questa fascia.</p><p>Prima disponibilità per questo programma: <b>${fT(f)}</b></p><div class="row"><button class="p" onclick="A.use(${f})">Usa questo orario</button><button onclick="closeM()">Chiudi</button></div>`);return}sel.bt=lt(t).toISOString().slice(0,16);machModal(sel.m)},
+ use(t){sel.bt=lt(t).toISOString().slice(0,16);machModal(sel.m)},
  ofBack(id){closeM();const b=S.bookings.find(x=>x.id==id);if(!b||b.status!='booked'||b.ofConf==null||b.o0==null)return;b.start=b.o0;b.end=b.o1;b.pid=S.programs.some(p=>p.id==b.op)?b.op:b.pid;b.f1=0;clearOf(b);save();render()},
  cancel(id,full){closeM();const b=S.bookings.find(x=>x.id==id);if(b&&!full&&b.status=='booked'&&b.ofConf!=null&&b.o0!=null){modal(`<h2>Prenotazione anticipata</h2><p>Questa prenotazione era stata anticipata. Originariamente era fissata per <b>${fT(b.o0)}</b>.</p><div class="row" style="flex-direction:column;gap:8px"><button class="p" onclick="A.ofBack('${b.id}')">Torna all’orario originale (${fT(b.o0)})</button><button class="d" onclick="A.cancel('${b.id}',1)">Annulla del tutto la prenotazione</button><button onclick="closeM()">Chiudi</button></div>`);return}if(b){const was=b.status;b.status='cancelled';b.why='annullata da te';if(was=='booked'){offerNext(b);if(cutLinked(b,1))alert('Anche l’asciugatura collegata a questo lavaggio è stata annullata.')}save();render()}},
  start(id){closeM();const b=S.bookings.find(x=>x.id==id);if(!b||!canGo(b))return;const o0=b.o0,wasA=b.ofConf!=null;b.status='running';clearOf(b);b.startedAt=now();b.end=b.startedAt+prog(b.pid).min*M;if(wasA)offerAfter(b,o0);save();render()},
